@@ -1,5 +1,6 @@
-use iced::Element;
-use iced::widget::{Column, text};
+use iced::widget::{Column, button, row, text};
+use iced::window::Position;
+use iced::{Element, Size, window};
 use std::fs;
 
 struct Player {
@@ -7,7 +8,9 @@ struct Player {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Message {}
+enum Message {
+    Play,
+}
 
 impl Default for Player {
     fn default() -> Self {
@@ -31,14 +34,14 @@ impl Player {
     fn update(&mut self, _message: Message) {}
 
     fn view(&self) -> Element<'_, Message> {
+        let play_button = button("Play").on_press(Message::Play);
         let elements: Vec<Element<Message>> = self
             .list
             .iter()
-            .map(|item| text(item).size(20).into())
+            .map(|item| text(item).size(14).into())
             .collect();
-
-        // 3. Собираем вектор виджетов в контейнер Column
-        Column::with_children(elements)
+        let list_column = Column::with_children(elements);
+        row![play_button, list_column]
             .spacing(10)
             .padding(20)
             .into()
@@ -66,5 +69,20 @@ fn main() -> iced::Result {
     //player.try_seek(Duration::from_mins(1));
     //
     //player.sleep_until_end();
-    iced::application(Player::default, Player::update, Player::view).run()
+    iced::application(Player::default, Player::update, Player::view)
+        .title("Rust Music Player")
+        .window(window::Settings {
+            size: Size::new(800.0, 600.0),
+            fullscreen: false,
+            position: Position::Centered,
+            resizable: false,
+            closeable: true,
+            minimizable: true,
+            decorations: true,
+            transparent: false,
+            blur: false,
+            exit_on_close_request: true,
+            ..Default::default()
+        })
+        .run()
 }
