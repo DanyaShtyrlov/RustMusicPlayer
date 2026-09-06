@@ -1,10 +1,11 @@
 use iced::theme::Palette;
-use iced::widget::{Column, button, row, scrollable, text};
+use iced::widget::{Column, button, column, row, scrollable, slider, text};
 use iced::window::Position;
-use iced::{Color, Element, Length, Size, Theme, window};
-use rodio::{Decoder, MixerDeviceSink, Player};
+use iced::{Color, Element, Length, Size, Subscription, Theme, window};
+use rodio::{Decoder, MixerDeviceSink, Player, Source};
 use std::fs;
 use std::io;
+use std::time::Duration;
 
 struct RPlayer {
     list: Vec<String>,
@@ -13,6 +14,8 @@ struct RPlayer {
     _device_handle: MixerDeviceSink,
     audio_player: Player,
     is_playing: bool,
+    current_position: f32,
+    song_duration: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -20,6 +23,8 @@ enum Message {
     Play,
     SelectSong(usize),
     Stop,
+    Seek(f32),
+    Tick,
 }
 
 impl Default for RPlayer {
@@ -47,11 +52,20 @@ impl Default for RPlayer {
             _device_handle: handle,
             audio_player: player,
             is_playing: false,
+            current_position: 0.0,
+            song_duration: 180.0,
         }
     }
 }
 
 impl RPlayer {
+    fn subscription(&self) -> Subscription<Message> {
+        if self.is_playing {
+            iced::time::every(Duration::from_millis(250)).map(|_| Message::Tick)
+        } else {
+            Subscription::none()
+        }
+    }
     fn update(&mut self, message: Message) {
         match message {
             Message::SelectSong(index) => {
@@ -61,16 +75,40 @@ impl RPlayer {
                 let chosen_song_path = self.path_list[self.selected_song.unwrap()].clone();
                 let reader = io::BufReader::new(fs::File::open(chosen_song_path).unwrap());
                 let source = Decoder::new(reader).unwrap();
+
+                self.song_duration = source
+                    .total_duration()
+                    .map(|d| d.as_secs_f32())
+                    .unwrap_or(180.0);
+                self.current_position = 0.0;
+
                 self.audio_player.stop();
                 self.audio_player.append(source);
                 self.audio_player.play();
-                println!("{}", self.path_list[self.selected_song.unwrap()]);
 
                 self.is_playing = true;
             }
             Message::Stop => {
                 self.audio_player.stop();
                 self.is_playing = false;
+            }
+
+            Message::Seek(new_position) => {
+                self.current_position = new_position;
+                let _ = self
+                    .audio_player
+                    .try_seek(Duration::from_secs_f32(new_position));
+            }
+
+            Message::Tick => {
+                if self.is_playing {
+                    self.current_position += 0.25;
+                    if self.current_position >= self.song_duration {
+                        self.current_position = 0.0;
+                        self.is_playing = false;
+                        self.audio_player.stop();
+                    }
+                }
             }
         }
     }
@@ -83,6 +121,22 @@ impl RPlayer {
                 .style(button::primary)
                 .on_press(Message::Play)
         };
+        let seek_bar = slider(
+            0.0..=self.song_duration,
+            self.current_position,
+            Message::Seek,
+        )
+        .step(0.5_f32);
+
+        let time_label = text(format!(
+            "{} / {}",
+            format_time(self.current_position),
+            format_time(self.song_duration)
+        ))
+        .size(13);
+
+        let left_panel = column![seek_bar, time_label, play_button];
+
         let elements: Vec<Element<Message>> = self
             .list
             .iter()
@@ -101,9 +155,17 @@ impl RPlayer {
             })
             .collect();
         let list_view = scrollable(Column::with_children(elements).spacing(6)).height(Length::Fill);
+
         //let list_column = Column::with_children(elements);
-        row![play_button, list_view].spacing(10).padding(20).into()
+        row![left_panel, list_view].spacing(10).padding(20).into()
     }
+}
+
+fn format_time(seconds: f32) -> String {
+    let secs = seconds as u32;
+    let mins = secs / 60;
+    let rem_secs = secs % 60;
+    format!("{:02}:{:02}", mins, rem_secs)
 }
 
 fn custom_theme(_state: &RPlayer) -> Theme {
@@ -115,7 +177,7 @@ fn custom_theme(_state: &RPlayer) -> Theme {
         warning: Color::from_rgb8(243, 139, 168),
         danger: Color::from_rgb8(243, 139, 168),
     };
-    Theme::custom("Catppuccin Mocha".to_string(), palette)
+    Theme::custom("Purple".to_string(), palette)
 }
 
 fn main() -> iced::Result {
@@ -123,6 +185,7 @@ fn main() -> iced::Result {
     iced::application(RPlayer::default, RPlayer::update, RPlayer::view)
         .title("Rust Music Player")
         .theme(custom_theme)
+        .subscription(RPlayer::subscription)
         .window(window::Settings {
             size: Size::new(400.0, 600.0),
             fullscreen: false,
