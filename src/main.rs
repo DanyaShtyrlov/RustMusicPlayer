@@ -1,4 +1,4 @@
-use iced::{Element};
+use iced::Element;
 use iced::widget::{Column, text};
 use std::fs;
 
