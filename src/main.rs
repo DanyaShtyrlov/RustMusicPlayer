@@ -1,6 +1,7 @@
+use iced::theme::Palette;
 use iced::widget::{Column, button, row, scrollable, text};
 use iced::window::Position;
-use iced::{Element, Length, Size, window};
+use iced::{Color, Element, Length, Size, Theme, window};
 use rodio::{Decoder, MixerDeviceSink, Player};
 use std::fs;
 use std::io;
@@ -11,12 +12,14 @@ struct RPlayer {
     selected_song: Option<usize>,
     _device_handle: MixerDeviceSink,
     audio_player: Player,
+    is_playing: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum Message {
     Play,
     SelectSong(usize),
+    Stop,
 }
 
 impl Default for RPlayer {
@@ -43,6 +46,7 @@ impl Default for RPlayer {
             selected_song: None,
             _device_handle: handle,
             audio_player: player,
+            is_playing: false,
         }
     }
 }
@@ -61,12 +65,24 @@ impl RPlayer {
                 self.audio_player.append(source);
                 self.audio_player.play();
                 println!("{}", self.path_list[self.selected_song.unwrap()]);
+
+                self.is_playing = true;
+            }
+            Message::Stop => {
+                self.audio_player.stop();
+                self.is_playing = false;
             }
         }
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let play_button = button("Play").on_press(Message::Play);
+        let play_button = if self.is_playing {
+            button("Stop").style(button::danger).on_press(Message::Stop)
+        } else {
+            button("Play")
+                .style(button::primary)
+                .on_press(Message::Play)
+        };
         let elements: Vec<Element<Message>> = self
             .list
             .iter()
@@ -90,10 +106,23 @@ impl RPlayer {
     }
 }
 
+fn custom_theme(_state: &RPlayer) -> Theme {
+    let palette = Palette {
+        background: Color::from_rgb8(30, 30, 46),
+        text: Color::from_rgb8(205, 214, 244),
+        primary: Color::from_rgb8(203, 166, 247),
+        success: Color::from_rgb8(166, 227, 161),
+        warning: Color::from_rgb8(243, 139, 168),
+        danger: Color::from_rgb8(243, 139, 168),
+    };
+    Theme::custom("Catppuccin Mocha".to_string(), palette)
+}
+
 fn main() -> iced::Result {
     //player.try_seek(Duration::from_mins(1));
     iced::application(RPlayer::default, RPlayer::update, RPlayer::view)
         .title("Rust Music Player")
+        .theme(custom_theme)
         .window(window::Settings {
             size: Size::new(400.0, 600.0),
             fullscreen: false,
