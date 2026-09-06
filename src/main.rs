@@ -1,11 +1,16 @@
 use iced::widget::{Column, button, row, scrollable, text};
 use iced::window::Position;
 use iced::{Element, Length, Size, window};
+use rodio::{Decoder, MixerDeviceSink, Player};
 use std::fs;
+use std::io;
 
-struct Player {
+struct RPlayer {
     list: Vec<String>,
+    path_list: Vec<String>,
     selected_song: Option<usize>,
+    _device_handle: MixerDeviceSink,
+    audio_player: Player,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -14,32 +19,49 @@ enum Message {
     SelectSong(usize),
 }
 
-impl Default for Player {
+impl Default for RPlayer {
     fn default() -> Self {
         let mut list = Vec::new();
+        let mut path_list = Vec::new();
         if let Ok(dir) = fs::read_dir(r"D:\rust_projects\player\examples") {
             for entry in dir.flatten() {
                 let path = entry.path();
                 if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
                     list.push(file_name.to_string());
                 }
+                path_list.push(path.into_string().unwrap_or_default());
             }
         }
 
+        let handle =
+            rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
+        let player = rodio::Player::connect_new(handle.mixer());
+
         Self {
             list,
+            path_list,
             selected_song: None,
+            _device_handle: handle,
+            audio_player: player,
         }
     }
 }
 
-impl Player {
+impl RPlayer {
     fn update(&mut self, message: Message) {
         match message {
             Message::SelectSong(index) => {
                 self.selected_song = Some(index);
             }
-            Message::Play => todo!(),
+            Message::Play => {
+                let chosen_song_path = self.path_list[self.selected_song.unwrap()].clone();
+                let reader = io::BufReader::new(fs::File::open(chosen_song_path).unwrap());
+                let source = Decoder::new(reader).unwrap();
+                self.audio_player.stop();
+                self.audio_player.append(source);
+                self.audio_player.play();
+                println!("{}", self.path_list[self.selected_song.unwrap()]);
+            }
         }
     }
 
@@ -69,27 +91,8 @@ impl Player {
 }
 
 fn main() -> iced::Result {
-    //let mut input = String::new();
-    //io::stdin().read_line(&mut input)?;
-    //let dir = fs::read_dir(input.trim().trim_matches('"'))?;
-    //for entry in dir {
-    //    let entry = entry?;
-    //    let path = entry.path();
-    //    println!("{:?}", path.as_path());
-    //}
-    //let handle = rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
-    //let player = rodio::Player::connect_new(&handle.mixer());
-    //
-    //let reader = io::BufReader::new(
-    //    fs::File::open("examples/Виктор Цой - Звезда по имени Солнце.mp3").unwrap(),
-    //);
-    //let source = Decoder::new(reader).unwrap();
-    //
-    //player.append(source);
     //player.try_seek(Duration::from_mins(1));
-    //
-    //player.sleep_until_end();
-    iced::application(Player::default, Player::update, Player::view)
+    iced::application(RPlayer::default, RPlayer::update, RPlayer::view)
         .title("Rust Music Player")
         .window(window::Settings {
             size: Size::new(400.0, 600.0),
