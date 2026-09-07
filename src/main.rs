@@ -1,9 +1,16 @@
-// Make songs play while chosen (now its only plays via Start/Stop button)
 // Work on visuals
+// Make cover display instead of dummy
+// Fix the visual bug with task bar
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use iced::theme::Palette;
-use iced::widget::{Column, button, column, row, scrollable, slider, text};
+use iced::widget::{
+    Column, button, column, container, image, mouse_area, row, scrollable, slider, text,
+};
 use iced::window::Position;
-use iced::{Color, Element, Length, Size, Subscription, Theme, window};
+use iced::{
+    Alignment, Background, Border, Color, Element, Length, Size, Subscription, Task, Theme, border,
+    window,
+};
 use rodio::{Decoder, MixerDeviceSink, Player, Source};
 use std::fs;
 use std::time::Duration;
@@ -20,8 +27,12 @@ struct RPlayer {
     song_duration: f32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Message {
+    MinimizeWindow,
+    MaximizeWindow,
+    CloseWindow,
+    DragWindow,
     Play,
     SelectSong(usize),
     Pause,
@@ -97,11 +108,43 @@ impl RPlayer {
         self.is_playing = true;
     }
 
-    fn update(&mut self, message: Message) {
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::MinimizeWindow => window::latest().then(|id| {
+                if let Some(id) = id {
+                    window::minimize(id, true)
+                } else {
+                    Task::none()
+                }
+            }),
+            Message::MaximizeWindow => window::latest().then(|id| {
+                if let Some(id) = id {
+                    window::toggle_maximize(id)
+                } else {
+                    Task::none()
+                }
+            }),
+
+            Message::CloseWindow => window::latest().then(|id| {
+                if let Some(id) = id {
+                    window::close(id)
+                } else {
+                    Task::none()
+                }
+            }),
+
+            Message::DragWindow => window::latest().then(|id| {
+                if let Some(id) = id {
+                    window::drag(id)
+                } else {
+                    Task::none()
+                }
+            }),
+
             Message::SelectSong(index) => {
                 self.selected_song = Some(index);
                 self.play_song(index);
+                Task::none()
             }
 
             Message::Play => {
@@ -113,15 +156,18 @@ impl RPlayer {
                         self.is_playing = true;
                     }
                 }
+                Task::none()
             }
 
             Message::Pause => {
                 self.audio_player.pause();
                 self.is_playing = false;
+                Task::none()
             }
 
             Message::SeekChanged(new_position) => {
                 self.current_position = new_position;
+                Task::none()
             }
 
             Message::SeekReleased => {
@@ -142,6 +188,7 @@ impl RPlayer {
                         self.audio_player.pause();
                     }
                 }
+                Task::none()
             }
 
             Message::Tick => {
@@ -153,18 +200,59 @@ impl RPlayer {
                         self.audio_player.stop();
                     }
                 }
+                Task::none()
             }
         }
     }
 
     fn view(&self) -> Element<'_, Message> {
+        let minimize_button = button(text("—").size(12))
+            .padding([4, 8])
+            .style(button::secondary)
+            .on_press(Message::MinimizeWindow);
+
+        let maximize_button = button(text("☐").size(12))
+            .padding([4, 8])
+            .style(button::secondary)
+            .on_press(Message::MaximizeWindow);
+
+        let close_button = button(text("✕").size(12))
+            .padding([4, 8])
+            .style(button::danger)
+            .on_press(Message::CloseWindow);
+
+        let title_drag_area = mouse_area(
+            container(text("Rust Music Player").size(13))
+                .width(Length::Fill)
+                .padding(6),
+        )
+        .on_press(Message::DragWindow);
+
+        // 3. Собираем кастомную шапку
+        let title_bar = row![
+            title_drag_area,
+            minimize_button,
+            maximize_button,
+            close_button
+        ]
+        .spacing(6)
+        .align_y(Alignment::Center);
+
         let play_button = if self.is_playing {
             button("Pause")
-                .style(button::secondary)
+                .style(|theme: &Theme, status| {
+                    let mut style = button::secondary(theme, status);
+                    style.border.radius = iced::border::radius(50.0);
+                    style
+                })
                 .on_press(Message::Pause)
         } else {
             button("Play")
-                .style(button::primary)
+                .style(|theme: &Theme, status| {
+                    let mut style = button::primary(theme, status);
+                    style.border.radius = iced::border::radius(50.0);
+                    style
+                })
                 .on_press(Message::Play)
         };
         let seek_bar = slider(
@@ -172,6 +260,7 @@ impl RPlayer {
             self.current_position,
             Message::SeekChanged,
         )
+        .width(Length::Fill)
         .on_release(Message::SeekReleased)
         .step(0.5_f32);
 
@@ -180,9 +269,21 @@ impl RPlayer {
             format_time(self.current_position),
             format_time(self.song_duration)
         ))
-        .size(13);
+        .size(14);
 
-        let left_panel = column![seek_bar, time_label, play_button];
+        let control_elements = container(row![play_button].spacing(10))
+            .width(Length::Fill)
+            .align_x(Alignment::Center)
+            .align_y(Alignment::Center);
+
+        let handle_image =
+            image::Handle::from_bytes(include_bytes!("../assets/dummy.png").as_slice());
+        let cover = container(image(handle_image))
+            .style(container::primary)
+            .align_x(Alignment::Center)
+            .align_y(Alignment::Center);
+
+        let left_panel = column![cover, seek_bar, time_label, control_elements];
 
         let elements: Vec<Element<Message>> = self
             .list
@@ -190,21 +291,38 @@ impl RPlayer {
             .enumerate()
             .map(|(index, item)| {
                 let is_selected = self.selected_song == Some(index);
-                let item_button = button(text(item).size(15))
+                let item_button = button(text(item).size(14))
                     .width(Length::Fill)
                     .style(if is_selected {
-                        button::primary
+                        button::success
                     } else {
                         button::secondary
                     })
                     .on_press(Message::SelectSong(index));
-                row![item_button].spacing(8).into()
+                row![item_button].spacing(8).padding(8).into()
             })
             .collect();
-        let list_view = scrollable(Column::with_children(elements).spacing(6)).height(Length::Fill);
+        let song_list =
+            container(scrollable(Column::with_children(elements).spacing(6)).height(Length::Fill))
+                .style(container::primary);
+        let main_content = row![left_panel, song_list].spacing(10).padding(20);
 
-        //let list_column = Column::with_children(elements);
-        row![left_panel, list_view].spacing(10).padding(20).into()
+        let window_layout = Column::new().push(title_bar).push(main_content);
+
+        container(window_layout)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(1)
+            .style(|_theme| container::Style {
+                background: Some(Background::Color(Color::from_rgb8(81, 45, 32))),
+                border: Border {
+                    color: Color::from_rgb8(115, 65, 32),
+                    width: 2.0,
+                    radius: border::Radius::from(10.0),
+                },
+                ..Default::default()
+            })
+            .into()
     }
 }
 
@@ -217,31 +335,33 @@ fn format_time(seconds: f32) -> String {
 
 fn custom_theme(_state: &RPlayer) -> Theme {
     let palette = Palette {
-        background: Color::from_rgb8(30, 30, 46),
-        text: Color::from_rgb8(205, 214, 244),
-        primary: Color::from_rgb8(203, 166, 247),
-        success: Color::from_rgb8(166, 227, 161),
-        warning: Color::from_rgb8(243, 139, 168),
-        danger: Color::from_rgb8(243, 139, 168),
+        background: Color::from_rgb8(81, 45, 32),
+        text: Color::from_rgb8(181, 136, 94),
+        primary: Color::from_rgb8(115, 65, 32),
+        success: Color::from_rgb8(139, 140, 82),
+        warning: Color::from_rgb8(195, 118, 40),
+        danger: Color::from_rgb8(111, 36, 31),
     };
-    Theme::custom("Purple".to_string(), palette)
+    Theme::custom("ArinasCoffee".to_string(), palette)
 }
 
 fn main() -> iced::Result {
-    //player.try_seek(Duration::from_mins(1));
+    let icon_bytes = include_bytes!("../assets/icon.png");
+    let icon = window::icon::from_file_data(icon_bytes, None).unwrap();
     iced::application(RPlayer::default, RPlayer::update, RPlayer::view)
         .title("Rust Music Player")
         .theme(custom_theme)
         .subscription(RPlayer::subscription)
         .window(window::Settings {
+            icon: Some(icon),
             size: Size::new(400.0, 600.0),
             fullscreen: false,
             position: Position::Centered,
             resizable: false,
             closeable: true,
             minimizable: true,
-            decorations: true,
-            transparent: false,
+            decorations: false,
+            transparent: true,
             blur: false,
             exit_on_close_request: true,
             ..Default::default()
