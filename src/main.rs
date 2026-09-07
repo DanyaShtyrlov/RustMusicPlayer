@@ -1,16 +1,18 @@
+// Make songs play while chosen (now its only plays via Start/Stop button)
+// Work on visuals
 use iced::theme::Palette;
 use iced::widget::{Column, button, column, row, scrollable, slider, text};
 use iced::window::Position;
 use iced::{Color, Element, Length, Size, Subscription, Theme, window};
 use rodio::{Decoder, MixerDeviceSink, Player, Source};
 use std::fs;
-use std::io;
 use std::time::Duration;
 
 struct RPlayer {
     list: Vec<String>,
     path_list: Vec<String>,
     selected_song: Option<usize>,
+    current_song: Option<usize>,
     _device_handle: MixerDeviceSink,
     audio_player: Player,
     is_playing: bool,
@@ -22,8 +24,9 @@ struct RPlayer {
 enum Message {
     Play,
     SelectSong(usize),
-    Stop,
-    Seek(f32),
+    Pause,
+    SeekChanged(f32),
+    SeekReleased,
     Tick,
 }
 
@@ -49,6 +52,7 @@ impl Default for RPlayer {
             list,
             path_list,
             selected_song: None,
+            current_song: None,
             _device_handle: handle,
             audio_player: player,
             is_playing: false,
@@ -66,38 +70,78 @@ impl RPlayer {
             Subscription::none()
         }
     }
+
+    fn play_song(&mut self, index: usize) {
+        let Some(path) = self.path_list.get(index) else {
+            return;
+        };
+        let Ok(file) = std::fs::File::open(path) else {
+            return;
+        };
+        let Ok(source) = rodio::Decoder::new(std::io::BufReader::new(file)) else {
+            return;
+        };
+
+        self.song_duration = source
+            .total_duration()
+            .map(|d| d.as_secs_f32())
+            .unwrap_or(180.0);
+
+        self.current_position = 0.0;
+        self.audio_player.stop();
+        self.audio_player.append(source);
+        self.audio_player.play();
+
+        self.selected_song = Some(index);
+        self.current_song = Some(index);
+        self.is_playing = true;
+    }
+
     fn update(&mut self, message: Message) {
         match message {
             Message::SelectSong(index) => {
                 self.selected_song = Some(index);
+                self.play_song(index);
             }
+
             Message::Play => {
-                let chosen_song_path = self.path_list[self.selected_song.unwrap()].clone();
-                let reader = io::BufReader::new(fs::File::open(chosen_song_path).unwrap());
-                let source = Decoder::new(reader).unwrap();
-
-                self.song_duration = source
-                    .total_duration()
-                    .map(|d| d.as_secs_f32())
-                    .unwrap_or(180.0);
-                self.current_position = 0.0;
-
-                self.audio_player.stop();
-                self.audio_player.append(source);
-                self.audio_player.play();
-
-                self.is_playing = true;
+                if let Some(selected_index) = self.selected_song {
+                    if self.current_song != Some(selected_index) {
+                        self.play_song(selected_index);
+                    } else {
+                        self.audio_player.play();
+                        self.is_playing = true;
+                    }
+                }
             }
-            Message::Stop => {
-                self.audio_player.stop();
+
+            Message::Pause => {
+                self.audio_player.pause();
                 self.is_playing = false;
             }
 
-            Message::Seek(new_position) => {
+            Message::SeekChanged(new_position) => {
                 self.current_position = new_position;
-                let _ = self
-                    .audio_player
-                    .try_seek(Duration::from_secs_f32(new_position));
+            }
+
+            Message::SeekReleased => {
+                let target = Duration::from_secs_f32(self.current_position);
+                if self.audio_player.try_seek(target).is_err()
+                    && let Some(index) = self.selected_song
+                    && let Some(path) = self.path_list.get(index)
+                    && let Ok(file) = fs::File::open(path)
+                    && let Ok(mut source) = Decoder::new(std::io::BufReader::new(file))
+                {
+                    let _ = source.try_seek(target);
+                    self.audio_player.stop();
+                    self.audio_player.append(source);
+
+                    if self.is_playing {
+                        self.audio_player.play();
+                    } else {
+                        self.audio_player.pause();
+                    }
+                }
             }
 
             Message::Tick => {
@@ -115,7 +159,9 @@ impl RPlayer {
 
     fn view(&self) -> Element<'_, Message> {
         let play_button = if self.is_playing {
-            button("Stop").style(button::danger).on_press(Message::Stop)
+            button("Pause")
+                .style(button::secondary)
+                .on_press(Message::Pause)
         } else {
             button("Play")
                 .style(button::primary)
@@ -124,8 +170,9 @@ impl RPlayer {
         let seek_bar = slider(
             0.0..=self.song_duration,
             self.current_position,
-            Message::Seek,
+            Message::SeekChanged,
         )
+        .on_release(Message::SeekReleased)
         .step(0.5_f32);
 
         let time_label = text(format!(
