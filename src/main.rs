@@ -11,6 +11,8 @@ use iced::{
     Alignment, Background, Border, Color, Element, Length, Size, Subscription, Task, Theme, border,
     window,
 };
+use lofty::file::TaggedFileExt;
+use lofty::probe::Probe;
 use rodio::{Decoder, MixerDeviceSink, Player, Source};
 use std::fs;
 use std::time::Duration;
@@ -25,6 +27,7 @@ struct RPlayer {
     is_playing: bool,
     current_position: f32,
     song_duration: f32,
+    cover_handle: image::Handle,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +62,9 @@ impl Default for RPlayer {
             rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
         let player = rodio::Player::connect_new(handle.mixer());
 
+        let cover_handle =
+            image::Handle::from_bytes(&*include_bytes!("../assets/dummy.png").as_slice());
+
         Self {
             list,
             path_list,
@@ -69,6 +75,7 @@ impl Default for RPlayer {
             is_playing: false,
             current_position: 0.0,
             song_duration: 180.0,
+            cover_handle,
         }
     }
 }
@@ -106,6 +113,10 @@ impl RPlayer {
         self.selected_song = Some(index);
         self.current_song = Some(index);
         self.is_playing = true;
+
+        self.cover_handle = extract_cover(path).unwrap_or_else(|| {
+            image::Handle::from_bytes(&include_bytes!("../assets/dummy.png")[..])
+        });
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -144,6 +155,8 @@ impl RPlayer {
             Message::SelectSong(index) => {
                 self.selected_song = Some(index);
                 self.play_song(index);
+                self.cover_handle =
+                    image::Handle::from_bytes(&include_bytes!("../assets/dummy.png")[..]);
                 Task::none()
             }
 
@@ -208,17 +221,29 @@ impl RPlayer {
     fn view(&self) -> Element<'_, Message> {
         let minimize_button = button(text("—").size(12))
             .padding([4, 8])
-            .style(button::secondary)
+            .style(|theme: &Theme, status| {
+                let mut style = button::secondary(theme, status);
+                style.border.radius = iced::border::radius(10.0);
+                style
+            })
             .on_press(Message::MinimizeWindow);
 
         let maximize_button = button(text("☐").size(12))
             .padding([4, 8])
-            .style(button::secondary)
+            .style(|theme: &Theme, status| {
+                let mut style = button::warning(theme, status);
+                style.border.radius = iced::border::radius(10.0);
+                style
+            })
             .on_press(Message::MaximizeWindow);
 
         let close_button = button(text("✕").size(12))
             .padding([4, 8])
-            .style(button::danger)
+            .style(|theme: &Theme, status| {
+                let mut style = button::danger(theme, status);
+                style.border.radius = iced::border::radius(10.0);
+                style
+            })
             .on_press(Message::CloseWindow);
 
         let title_drag_area = mouse_area(
@@ -228,18 +253,20 @@ impl RPlayer {
         )
         .on_press(Message::DragWindow);
 
-        // 3. Собираем кастомную шапку
-        let title_bar = row![
-            title_drag_area,
-            minimize_button,
-            maximize_button,
-            close_button
-        ]
-        .spacing(6)
-        .align_y(Alignment::Center);
+        let title_bar = container(
+            row![
+                title_drag_area,
+                minimize_button,
+                maximize_button,
+                close_button
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        )
+        .padding(8);
 
         let play_button = if self.is_playing {
-            button("Pause")
+            button("Play")
                 .style(|theme: &Theme, status| {
                     let mut style = button::secondary(theme, status);
                     style.border.radius = iced::border::radius(50.0);
@@ -247,7 +274,7 @@ impl RPlayer {
                 })
                 .on_press(Message::Pause)
         } else {
-            button("Play")
+            button("Pause")
                 .style(|theme: &Theme, status| {
                     let mut style = button::primary(theme, status);
                     style.border.radius = iced::border::radius(50.0);
@@ -255,6 +282,7 @@ impl RPlayer {
                 })
                 .on_press(Message::Play)
         };
+
         let seek_bar = slider(
             0.0..=self.song_duration,
             self.current_position,
@@ -276,9 +304,7 @@ impl RPlayer {
             .align_x(Alignment::Center)
             .align_y(Alignment::Center);
 
-        let handle_image =
-            image::Handle::from_bytes(include_bytes!("../assets/dummy.png").as_slice());
-        let cover = container(image(handle_image))
+        let cover = container(image(self.cover_handle.clone()))
             .style(container::primary)
             .align_x(Alignment::Center)
             .align_y(Alignment::Center);
@@ -302,9 +328,11 @@ impl RPlayer {
                 row![item_button].spacing(8).padding(8).into()
             })
             .collect();
+
         let song_list =
             container(scrollable(Column::with_children(elements).spacing(6)).height(Length::Fill))
                 .style(container::primary);
+
         let main_content = row![left_panel, song_list].spacing(10).padding(20);
 
         let window_layout = Column::new().push(title_bar).push(main_content);
@@ -343,6 +371,16 @@ fn custom_theme(_state: &RPlayer) -> Theme {
         danger: Color::from_rgb8(111, 36, 31),
     };
     Theme::custom("ArinasCoffee".to_string(), palette)
+}
+
+fn extract_cover(song_path: &str) -> Option<image::Handle> {
+    let tagged_file = Probe::open(song_path).ok()?.read().ok()?;
+    let tag = tagged_file
+        .primary_tag()
+        .or_else(|| tagged_file.first_tag())?;
+    let picture = tag.pictures().first()?;
+
+    Some(image::Handle::from_bytes(picture.data().to_vec()))
 }
 
 fn main() -> iced::Result {

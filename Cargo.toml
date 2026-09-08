@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 iced = {version = "0.14.0", features = ["tokio", "wgpu", "image"]}
+lofty = "0.25.1"
 rodio = "0.22.2"

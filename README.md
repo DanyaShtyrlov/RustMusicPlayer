@@ -7,7 +7,8 @@
 > Don't judge me hard, **It' my first project on Rust and Git.**
 
 ## Libs
-- **Rodio**
-- **Iced**
+- **Rodio** => 0.22.2
+- **Iced** => 0.14.0
+- **lofty** => 0.25.1
 
 **Thank you for visiting**
