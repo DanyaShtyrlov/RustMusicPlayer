@@ -1,10 +1,8 @@
 // Work on visuals
-// Make cover display instead of dummy
-// Fix the visual bug with task bar
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use iced::theme::Palette;
 use iced::widget::{
-    Column, button, column, container, image, mouse_area, row, scrollable, slider, text,
+    Column, button, column, container, image, mouse_area, row, scrollable, slider, text, text_input,
 };
 use iced::window::Position;
 use iced::{
@@ -28,6 +26,7 @@ struct RPlayer {
     current_position: f32,
     song_duration: f32,
     cover_handle: image::Handle,
+    search_query: String,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +41,9 @@ enum Message {
     SeekChanged(f32),
     SeekReleased,
     Tick,
+    NextSong,
+    PrevSong,
+    SearchInputChanged(String),
 }
 
 impl Default for RPlayer {
@@ -63,7 +65,7 @@ impl Default for RPlayer {
         let player = rodio::Player::connect_new(handle.mixer());
 
         let cover_handle =
-            image::Handle::from_bytes(&*include_bytes!("../assets/dummy.png").as_slice());
+            image::Handle::from_bytes(include_bytes!("../assets/dummy.png").as_slice());
 
         Self {
             list,
@@ -76,6 +78,7 @@ impl Default for RPlayer {
             current_position: 0.0,
             song_duration: 180.0,
             cover_handle,
+            search_query: String::new(),
         }
     }
 }
@@ -155,8 +158,6 @@ impl RPlayer {
             Message::SelectSong(index) => {
                 self.selected_song = Some(index);
                 self.play_song(index);
-                self.cover_handle =
-                    image::Handle::from_bytes(&include_bytes!("../assets/dummy.png")[..]);
                 Task::none()
             }
 
@@ -215,6 +216,33 @@ impl RPlayer {
                 }
                 Task::none()
             }
+
+            Message::NextSong => {
+                if !self.path_list.is_empty() {
+                    let current_idx = self.current_song.unwrap_or(0);
+                    let next_idx = (current_idx + 1) % self.path_list.len();
+                    self.play_song(next_idx);
+                }
+                Task::none()
+            }
+
+            Message::PrevSong => {
+                if !self.path_list.is_empty() {
+                    let current_idx = self.current_song.unwrap_or(0);
+                    let prev_idx = if current_idx == 0 {
+                        self.path_list.len() - 1
+                    } else {
+                        current_idx - 1
+                    };
+                    self.play_song(prev_idx);
+                }
+                Task::none()
+            }
+
+            Message::SearchInputChanged(query) => {
+                self.search_query = query;
+                Task::none()
+            }
         }
     }
 
@@ -265,8 +293,18 @@ impl RPlayer {
         )
         .padding(8);
 
+        let search_bar: Element<'_, Message> = container(
+            text_input("Song search...", &self.search_query)
+                .on_input(Message::SearchInputChanged)
+                .padding(8)
+                .size(14),
+        )
+        .style(container::secondary)
+        .width(Length::Fill)
+        .into();
+
         let play_button = if self.is_playing {
-            button("Play")
+            button("Pause")
                 .style(|theme: &Theme, status| {
                     let mut style = button::secondary(theme, status);
                     style.border.radius = iced::border::radius(50.0);
@@ -274,7 +312,7 @@ impl RPlayer {
                 })
                 .on_press(Message::Pause)
         } else {
-            button("Pause")
+            button("Play")
                 .style(|theme: &Theme, status| {
                     let mut style = button::primary(theme, status);
                     style.border.radius = iced::border::radius(50.0);
@@ -282,6 +320,22 @@ impl RPlayer {
                 })
                 .on_press(Message::Play)
         };
+
+        let previous_song_button = button("<")
+            .style(|theme: &Theme, status| {
+                let mut style = button::secondary(theme, status);
+                style.border.radius = iced::border::radius(50.0);
+                style
+            })
+            .on_press(Message::PrevSong);
+
+        let next_song_button = button(">")
+            .style(|theme: &Theme, status| {
+                let mut style = button::secondary(theme, status);
+                style.border.radius = iced::border::radius(50.0);
+                style
+            })
+            .on_press(Message::NextSong);
 
         let seek_bar = slider(
             0.0..=self.song_duration,
@@ -299,10 +353,11 @@ impl RPlayer {
         ))
         .size(14);
 
-        let control_elements = container(row![play_button].spacing(10))
-            .width(Length::Fill)
-            .align_x(Alignment::Center)
-            .align_y(Alignment::Center);
+        let control_elements =
+            container(row![previous_song_button, play_button, next_song_button].spacing(10))
+                .width(Length::Fill)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center);
 
         let cover = container(image(self.cover_handle.clone()))
             .style(container::primary)
@@ -317,7 +372,7 @@ impl RPlayer {
             .enumerate()
             .map(|(index, item)| {
                 let is_selected = self.selected_song == Some(index);
-                let item_button = button(text(item).size(14))
+                let item_button = button(text(item).size(12))
                     .width(Length::Fill)
                     .style(if is_selected {
                         button::success
@@ -325,7 +380,7 @@ impl RPlayer {
                         button::secondary
                     })
                     .on_press(Message::SelectSong(index));
-                row![item_button].spacing(8).padding(8).into()
+                row![item_button].spacing(4).padding(4).into()
             })
             .collect();
 
@@ -335,7 +390,10 @@ impl RPlayer {
 
         let main_content = row![left_panel, song_list].spacing(10).padding(20);
 
-        let window_layout = Column::new().push(title_bar).push(main_content);
+        let window_layout = Column::new()
+            .push(title_bar)
+            .push(search_bar)
+            .push(main_content);
 
         container(window_layout)
             .width(Length::Fill)
