@@ -50,7 +50,7 @@ impl Default for RPlayer {
     fn default() -> Self {
         let mut list = Vec::new();
         let mut path_list = Vec::new();
-        if let Ok(dir) = fs::read_dir(r"D:\rust_projects\player\examples") {
+        if let Ok(dir) = fs::read_dir("./songs") {
             for entry in dir.flatten() {
                 let path = entry.path();
                 if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
@@ -295,12 +295,19 @@ impl RPlayer {
 
         let search_bar: Element<'_, Message> = container(
             text_input("Song search...", &self.search_query)
+                .style(|theme: &Theme, status| {
+                    let mut style = text_input::default(theme, status);
+                    style.background = Background::Color(Color::from_rgb8(115, 65, 32));
+                    style.value = Color::from_rgb8(181, 136, 94);
+                    style
+                })
                 .on_input(Message::SearchInputChanged)
                 .padding(8)
                 .size(14),
         )
-        .style(container::secondary)
+        .style(container::rounded_box)
         .width(Length::Fill)
+        .padding(8)
         .into();
 
         let play_button = if self.is_playing {
