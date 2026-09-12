@@ -1,6 +1,5 @@
 // Work on visuals
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use iced::theme::Palette;
 use iced::widget::{
     Column, button, column, container, image, mouse_area, row, scrollable, slider, text, text_input,
 };
@@ -14,6 +13,22 @@ use lofty::probe::Probe;
 use rodio::{Decoder, MixerDeviceSink, Player, Source};
 use std::fs;
 use std::time::Duration;
+
+struct Palette;
+
+impl Palette {
+    const WINDOW_BG: Color = Color::from_rgb8(81, 45, 32);
+    const TEXT: Color = Color::from_rgb8(181, 136, 94);
+    const WINDOW_BORDER: Color = Color::from_rgb8(115, 65, 32);
+
+    const CONTAINER_BG: Color = Color::from_rgb8(115, 65, 32);
+    const CONTAINER_BORDER: Color = Color::from_rgb8(224, 196, 159);
+
+    const SEARCH_SELECTION: Color = Color::from_rgb8(155, 90, 50);
+    const SEARCH_BORDER_FOCUSED: Color = Color::from_rgb8(210, 140, 90);
+
+    const BORDER_RADIUS: f32 = 10.0;
+}
 
 struct RPlayer {
     list: Vec<String>,
@@ -298,14 +313,19 @@ impl RPlayer {
                 .style(|theme: &Theme, status| {
                     let mut style = text_input::default(theme, status);
                     style.background = Background::Color(Color::from_rgb8(115, 65, 32));
-                    style.value = Color::from_rgb8(181, 136, 94);
+                    style.placeholder = Palette::TEXT;
+                    style.value = Palette::TEXT;
+                    style.selection = Palette::SEARCH_SELECTION;
+                    if matches!(status, text_input::Status::Focused { .. }) {
+                        style.border.color = Palette::SEARCH_BORDER_FOCUSED;
+                        style.border.width = 2.0;
+                    }
                     style
                 })
                 .on_input(Message::SearchInputChanged)
                 .padding(8)
                 .size(14),
         )
-        .style(container::rounded_box)
         .width(Length::Fill)
         .padding(8)
         .into();
@@ -367,7 +387,16 @@ impl RPlayer {
                 .align_y(Alignment::Center);
 
         let cover = container(image(self.cover_handle.clone()))
-            .style(container::primary)
+            .style(|_theme| container::Style {
+                text_color: Some(Palette::TEXT),
+                background: Some(Background::Color(Palette::CONTAINER_BG)),
+                border: Border {
+                    color: Palette::CONTAINER_BORDER,
+                    width: 1.0,
+                    radius: border::Radius::from(Palette::BORDER_RADIUS),
+                },
+                ..Default::default()
+            })
             .align_x(Alignment::Center)
             .align_y(Alignment::Center);
 
@@ -393,7 +422,16 @@ impl RPlayer {
 
         let song_list =
             container(scrollable(Column::with_children(elements).spacing(6)).height(Length::Fill))
-                .style(container::primary);
+                .style(|_theme| container::Style {
+                    text_color: Some(Palette::TEXT),
+                    background: Some(Background::Color(Palette::CONTAINER_BG)),
+                    border: Border {
+                        color: Palette::CONTAINER_BORDER,
+                        width: 1.0,
+                        radius: border::Radius::from(Palette::BORDER_RADIUS),
+                    },
+                    ..Default::default()
+                });
 
         let main_content = row![left_panel, song_list].spacing(10).padding(20);
 
@@ -407,11 +445,11 @@ impl RPlayer {
             .height(Length::Fill)
             .padding(1)
             .style(|_theme| container::Style {
-                background: Some(Background::Color(Color::from_rgb8(81, 45, 32))),
+                background: Some(Background::Color(Palette::WINDOW_BG)),
                 border: Border {
-                    color: Color::from_rgb8(115, 65, 32),
+                    color: Palette::WINDOW_BORDER,
                     width: 2.0,
-                    radius: border::Radius::from(10.0),
+                    radius: border::Radius::from(0.0),
                 },
                 ..Default::default()
             })
@@ -424,18 +462,6 @@ fn format_time(seconds: f32) -> String {
     let mins = secs / 60;
     let rem_secs = secs % 60;
     format!("{:02}:{:02}", mins, rem_secs)
-}
-
-fn custom_theme(_state: &RPlayer) -> Theme {
-    let palette = Palette {
-        background: Color::from_rgb8(81, 45, 32),
-        text: Color::from_rgb8(181, 136, 94),
-        primary: Color::from_rgb8(115, 65, 32),
-        success: Color::from_rgb8(139, 140, 82),
-        warning: Color::from_rgb8(195, 118, 40),
-        danger: Color::from_rgb8(111, 36, 31),
-    };
-    Theme::custom("ArinasCoffee".to_string(), palette)
 }
 
 fn extract_cover(song_path: &str) -> Option<image::Handle> {
@@ -452,8 +478,6 @@ fn main() -> iced::Result {
     let icon_bytes = include_bytes!("../assets/icon.png");
     let icon = window::icon::from_file_data(icon_bytes, None).unwrap();
     iced::application(RPlayer::default, RPlayer::update, RPlayer::view)
-        .title("Rust Music Player")
-        .theme(custom_theme)
         .subscription(RPlayer::subscription)
         .window(window::Settings {
             icon: Some(icon),
