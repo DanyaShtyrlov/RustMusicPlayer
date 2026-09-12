@@ -17,16 +17,34 @@ use std::time::Duration;
 struct Palette;
 
 impl Palette {
+    //Window layout colors
     const WINDOW_BG: Color = Color::from_rgb8(81, 45, 32);
     const TEXT: Color = Color::from_rgb8(181, 136, 94);
     const WINDOW_BORDER: Color = Color::from_rgb8(115, 65, 32);
 
+    //Button colors
+    const COMMON_BUTTON: Color = Color::from_rgb8(181, 136, 94);
+    const BUTTON_TEXT: Color = Color::from_rgb8(81, 45, 32);
+    const WARNING_BUTTON: Color = Color::from_rgb8(195, 118, 40);
+    const DANGER_BUTTON: Color = Color::from_rgb8(111, 36, 31);
+    const SUCCESS_BUTTON: Color = Color::from_rgb8(139, 140, 82);
+
+    //Slider colors
+    const SLIDER_BG: Color = Color::from_rgb8(181, 136, 94);
+    const HANDLE_BG: Color = Color::from_rgb8(115, 65, 32);
+    const HANDLE_BORDER: Color = Color::from_rgb8(224, 196, 159);
+    const SLIDER_BORDER: Color = Color::from_rgb8(224, 196, 159);
+
+    //Container  colors
     const CONTAINER_BG: Color = Color::from_rgb8(115, 65, 32);
     const CONTAINER_BORDER: Color = Color::from_rgb8(224, 196, 159);
 
+    //Text input colors
+    const SEARCH_BG: Color = Color::from_rgb8(115, 65, 32);
     const SEARCH_SELECTION: Color = Color::from_rgb8(155, 90, 50);
-    const SEARCH_BORDER_FOCUSED: Color = Color::from_rgb8(210, 140, 90);
+    const SEARCH_BORDER_FOCUSED: Color = Color::from_rgb8(224, 196, 159);
 
+    //Style constants
     const BORDER_RADIUS: f32 = 10.0;
 }
 
@@ -266,7 +284,9 @@ impl RPlayer {
             .padding([4, 8])
             .style(|theme: &Theme, status| {
                 let mut style = button::secondary(theme, status);
-                style.border.radius = iced::border::radius(10.0);
+                style.background = Some(Background::Color(Palette::COMMON_BUTTON));
+                style.text_color = Palette::BUTTON_TEXT;
+                style.border.radius = iced::border::radius(Palette::BORDER_RADIUS);
                 style
             })
             .on_press(Message::MinimizeWindow);
@@ -275,7 +295,9 @@ impl RPlayer {
             .padding([4, 8])
             .style(|theme: &Theme, status| {
                 let mut style = button::warning(theme, status);
-                style.border.radius = iced::border::radius(10.0);
+                style.background = Some(Background::Color(Palette::WARNING_BUTTON));
+                style.text_color = Palette::BUTTON_TEXT;
+                style.border.radius = iced::border::radius(Palette::BORDER_RADIUS);
                 style
             })
             .on_press(Message::MaximizeWindow);
@@ -284,15 +306,25 @@ impl RPlayer {
             .padding([4, 8])
             .style(|theme: &Theme, status| {
                 let mut style = button::danger(theme, status);
-                style.border.radius = iced::border::radius(10.0);
+                style.background = Some(Background::Color(Palette::DANGER_BUTTON));
+                style.text_color = Palette::BUTTON_TEXT;
+                style.border.radius = iced::border::radius(Palette::BORDER_RADIUS);
                 style
             })
             .on_press(Message::CloseWindow);
 
         let title_drag_area = mouse_area(
-            container(text("Rust Music Player").size(13))
-                .width(Length::Fill)
-                .padding(6),
+            container(
+                text("Rust Music Player")
+                    .style(|theme: &Theme| {
+                        let mut style = text::default(theme);
+                        style.color = Some(Palette::TEXT);
+                        style
+                    })
+                    .size(13),
+            )
+            .width(Length::Fill)
+            .padding(6),
         )
         .on_press(Message::DragWindow);
 
@@ -312,7 +344,7 @@ impl RPlayer {
             text_input("Song search...", &self.search_query)
                 .style(|theme: &Theme, status| {
                     let mut style = text_input::default(theme, status);
-                    style.background = Background::Color(Color::from_rgb8(115, 65, 32));
+                    style.background = Background::Color(Palette::SEARCH_BG);
                     style.placeholder = Palette::TEXT;
                     style.value = Palette::TEXT;
                     style.selection = Palette::SEARCH_SELECTION;
@@ -334,7 +366,9 @@ impl RPlayer {
             button("Pause")
                 .style(|theme: &Theme, status| {
                     let mut style = button::secondary(theme, status);
-                    style.border.radius = iced::border::radius(50.0);
+                    style.background = Some(Background::Color(Palette::WARNING_BUTTON));
+                    style.text_color = Palette::BUTTON_TEXT;
+                    style.border.radius = iced::border::radius(Palette::BORDER_RADIUS);
                     style
                 })
                 .on_press(Message::Pause)
@@ -342,7 +376,9 @@ impl RPlayer {
             button("Play")
                 .style(|theme: &Theme, status| {
                     let mut style = button::primary(theme, status);
-                    style.border.radius = iced::border::radius(50.0);
+                    style.background = Some(Background::Color(Palette::COMMON_BUTTON));
+                    style.text_color = Palette::BUTTON_TEXT;
+                    style.border.radius = iced::border::radius(Palette::BORDER_RADIUS);
                     style
                 })
                 .on_press(Message::Play)
@@ -351,7 +387,9 @@ impl RPlayer {
         let previous_song_button = button("<")
             .style(|theme: &Theme, status| {
                 let mut style = button::secondary(theme, status);
-                style.border.radius = iced::border::radius(50.0);
+                style.background = Some(Background::Color(Palette::COMMON_BUTTON));
+                style.text_color = Palette::BUTTON_TEXT;
+                style.border.radius = iced::border::radius(Palette::BORDER_RADIUS);
                 style
             })
             .on_press(Message::PrevSong);
@@ -359,7 +397,9 @@ impl RPlayer {
         let next_song_button = button(">")
             .style(|theme: &Theme, status| {
                 let mut style = button::secondary(theme, status);
-                style.border.radius = iced::border::radius(50.0);
+                style.background = Some(Background::Color(Palette::COMMON_BUTTON));
+                style.text_color = Palette::BUTTON_TEXT;
+                style.border.radius = iced::border::radius(Palette::BORDER_RADIUS);
                 style
             })
             .on_press(Message::NextSong);
@@ -369,6 +409,28 @@ impl RPlayer {
             self.current_position,
             Message::SeekChanged,
         )
+        .style(|theme: &Theme, status| {
+            let mut style = slider::default(theme, status);
+            style.rail = slider::Rail {
+                backgrounds: (
+                    Background::Color(Palette::SLIDER_BG),
+                    Background::Color(Palette::SLIDER_BG),
+                ),
+                border: Border {
+                    color: Palette::SLIDER_BORDER,
+                    width: 1.0,
+                    radius: border::Radius::from(Palette::BORDER_RADIUS),
+                },
+                width: 4.0,
+            };
+            style.handle = slider::Handle {
+                shape: slider::HandleShape::Circle { radius: 8.0 },
+                background: Background::Color(Palette::HANDLE_BG),
+                border_width: 2.0,
+                border_color: Palette::HANDLE_BORDER,
+            };
+            style
+        })
         .width(Length::Fill)
         .on_release(Message::SeekReleased)
         .step(0.5_f32);
@@ -378,6 +440,11 @@ impl RPlayer {
             format_time(self.current_position),
             format_time(self.song_duration)
         ))
+        .style(|theme: &Theme| {
+            let mut style = text::default(theme);
+            style.color = Some(Palette::TEXT);
+            style
+        })
         .size(14);
 
         let control_elements =
@@ -410,10 +477,16 @@ impl RPlayer {
                 let is_selected = self.selected_song == Some(index);
                 let item_button = button(text(item).size(12))
                     .width(Length::Fill)
-                    .style(if is_selected {
-                        button::success
-                    } else {
-                        button::secondary
+                    .style(move |theme: &Theme, status| {
+                        let mut style = button::secondary(theme, status);
+                        style.text_color = Palette::BUTTON_TEXT;
+                        style.border.radius = iced::border::radius(Palette::BORDER_RADIUS);
+                        if is_selected {
+                            style.background = Some(Background::Color(Palette::SUCCESS_BUTTON));
+                        } else {
+                            style.background = Some(Background::Color(Palette::COMMON_BUTTON));
+                        }
+                        style
                     })
                     .on_press(Message::SelectSong(index));
                 row![item_button].spacing(4).padding(4).into()
