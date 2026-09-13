@@ -5,8 +5,8 @@ use iced::widget::{
 };
 use iced::window::Position;
 use iced::{
-    Alignment, Background, Border, Color, Element, Length, Size, Subscription, Task, Theme, border,
-    window,
+    Alignment, Background, Border, Color, Element, Length, Renderer, Size, Subscription, Task,
+    Theme, border, window,
 };
 use lofty::file::TaggedFileExt;
 use lofty::probe::Probe;
@@ -48,6 +48,12 @@ impl Palette {
     const BORDER_RADIUS: f32 = 10.0;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchMode {
+    Local,
+    Internet,
+}
+
 struct RPlayer {
     list: Vec<String>,
     path_list: Vec<String>,
@@ -60,6 +66,7 @@ struct RPlayer {
     song_duration: f32,
     cover_handle: image::Handle,
     search_query: String,
+    search_mode: SearchMode,
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +84,7 @@ enum Message {
     NextSong,
     PrevSong,
     SearchInputChanged(String),
+    SetSearchMode,
 }
 
 impl Default for RPlayer {
@@ -112,6 +120,7 @@ impl Default for RPlayer {
             song_duration: 180.0,
             cover_handle,
             search_query: String::new(),
+            search_mode: SearchMode::Local,
         }
     }
 }
@@ -276,6 +285,14 @@ impl RPlayer {
                 self.search_query = query;
                 Task::none()
             }
+
+            Message::SetSearchMode => {
+                self.search_mode = match self.search_mode {
+                    SearchMode::Local => SearchMode::Internet,
+                    SearchMode::Internet => SearchMode::Local,
+                };
+                Task::none()
+            }
         }
     }
 
@@ -340,7 +357,31 @@ impl RPlayer {
         )
         .padding(8);
 
-        let search_bar: Element<'_, Message> = container(
+        let mode_label = match self.search_mode {
+            SearchMode::Local => "Local",
+            SearchMode::Internet => "Internet",
+        };
+
+        let set_mode_button: iced::widget::Button<'_, _, iced::Theme, Renderer> =
+            button(text(mode_label).size(12))
+                .padding(10)
+                .style(move |theme: &Theme, status| {
+                    let mut style = button::secondary(theme, status);
+                    style.border.radius = iced::border::radius(Palette::BORDER_RADIUS);
+                    match self.search_mode {
+                        SearchMode::Local => {
+                            style.background = Some(Background::Color(Palette::SUCCESS_BUTTON));
+                        }
+                        SearchMode::Internet => {
+                            style.background = Some(Background::Color(Palette::WARNING_BUTTON));
+                        }
+                    }
+                    style.text_color = Palette::BUTTON_TEXT;
+                    style
+                })
+                .on_press(Message::SetSearchMode);
+
+        let search_bar: Element<'_, Message> = container(row![
             text_input("Song search...", &self.search_query)
                 .style(|theme: &Theme, status| {
                     let mut style = text_input::default(theme, status);
@@ -357,7 +398,8 @@ impl RPlayer {
                 .on_input(Message::SearchInputChanged)
                 .padding(8)
                 .size(14),
-        )
+            set_mode_button
+        ])
         .width(Length::Fill)
         .padding(8)
         .into();
@@ -469,14 +511,24 @@ impl RPlayer {
 
         let left_panel = column![cover, seek_bar, time_label, control_elements];
 
+        let query_lower = self.search_query.to_lowercase();
+
         let elements: Vec<Element<Message>> = self
             .list
             .iter()
             .enumerate()
+            .filter(|(_, item)| {
+                if self.search_mode == SearchMode::Local && !query_lower.is_empty() {
+                    item.to_lowercase().contains(&query_lower)
+                } else {
+                    true
+                }
+            })
             .map(|(index, item)| {
                 let is_selected = self.selected_song == Some(index);
                 let item_button = button(text(item).size(12))
                     .width(Length::Fill)
+                    .clip(true)
                     .style(move |theme: &Theme, status| {
                         let mut style = button::secondary(theme, status);
                         style.text_color = Palette::BUTTON_TEXT;
